@@ -1,0 +1,61 @@
+#!/bin/bash
+#
+# Simple Bash Script To Check Tungsten Policy
+# Nagios Plugin For NRPE
+#
+# This script does not accept any arguments.  It will return error if the
+# cluster is in maintenance mode
+#
+OK_STATE=0
+WARNING_STATE=1
+CRITICAL_STATE=2
+THOME=`dirname $0`
+
+error_message=""
+error_messaage_glue=""
+offline_count=0
+dataservice=""
+
+function display_help()
+{
+  echo "Usage: ./check_tungsten_policy -s dataservice [-h]"
+  echo " -s                     The data service you would like to check"
+  echo " -h                     Display this message"
+  exit 0
+}
+
+while getopts "s:h" Option
+do
+  case $Option in
+    h )
+    display_help
+    ;;
+    s   )
+    dataservice=$OPTARG
+    ;;
+  esac
+done
+
+manager_running=`${THOME}/../../tungsten-manager/bin/manager status | grep "PID" | wc -l`
+# Check the manager status
+if [ $manager_running -eq 0 ]; then
+  echo "CRITICAL: Manager is not running"
+  exit $CRITICAL_STATE
+fi
+
+if [ "$dataservice" == "" ]; then
+    maint_mode=`echo "ls " | ${THOME}/../../tungsten-manager/bin/cctrl | grep MAINTENANCE | wc -l`
+else
+    maint_mode=`echo "use $dataservice; ls " | ${THOME}/../../tungsten-manager/bin/cctrl | grep MAINTENANCE | wc -l`
+fi
+
+
+if [ $maint_mode -gt 0 ]
+then
+  echo "CRITICAL: Cluster is in Maintenance mode"
+  exit $CRITICAL_STATE
+fi
+
+
+echo "OK: Cluster is in Automatic Mode"
+exit $OK_STATE
