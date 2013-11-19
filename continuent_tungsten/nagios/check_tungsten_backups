@@ -1,0 +1,66 @@
+#!/usr/bin/env ruby
+#
+# The script should be run as the tungsten user to ensure the
+# environment is set correctly.  Export the environment variables before
+# calling the script to modify behavior
+#
+
+require "#{File.dirname(__FILE__)}/../lib/ruby/tungsten"
+
+class CheckTungstenBackups
+  include TungstenScript
+  
+  def main
+    status = TI.status()
+    unless status.coordinator() == TI.hostname()
+      nagios_ok("Not running check because this node is not the coordinator")
+    end
+    seconds_since_epoch = TU.cmd_result("date +%s").to_i()
+    most_recent_backup = nil
+    
+    status.datasources().each{
+      |ds|
+      begin
+        TU.ssh_result("stat -c\"%n %Y\" #{TI.trepctl_property(status.name(), 'replicator.storage.agent.fs.directory')}/store*.properties 2>/dev/null", ds, TI.user()).split("\n").each{
+          |line|
+          stored_backup=line.split(" ")
+          stored_backup[1] = stored_backup[1].to_i()
+          
+          if most_recent_backup == nil || stored_backup[1] > most_recent_backup[:seconds]
+            most_recent_backup = {
+              :hostname => ds,
+              :filename => stored_backup[0],
+              :seconds => stored_backup[1]
+            }
+          end
+        }
+      rescue CommandError
+      end
+    }
+    
+    if most_recent_backup == nil
+      nagios_critical("Unable to find a backup on any datasource")
+    end
+    
+    age = seconds_since_epoch-most_recent_backup[:seconds]
+    if age > @options[:max_backup_age]
+      nagios_critical("#{most_recent_backup[:hostname]}:#{most_recent_backup[:filename]} [#{age}s] is older than #{@options[:max_backup_age]}s")
+    else
+      nagios_ok("The most recent backup is #{most_recent_backup[:hostname]}:#{most_recent_backup[:filename]} [#{age}s]")
+    end
+  end
+  
+  def configure
+    super()
+    
+    description("Check all local datasources to make sure one of them has a backup younger than the max allowed age")
+    add_option(:max_backup_age, {
+      :on => "--max-backup-age String",
+      :help => "Maximum allowed age in seconds of a backup on any machine",
+      :parse => method(:parse_integer_option),
+      :default => 86400
+    })
+  end
+  
+  self.new().run()
+end
