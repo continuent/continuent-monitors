@@ -11,6 +11,7 @@ $tungsten_home = '/opt/continuent/tungsten';
 /**
  * Parse the command line options to pull the hostname
  */
+$trepctl_service = "";
 for ( $i = 1; $i < count($_SERVER["argv"]); $i++ ) {
   $key = $_SERVER["argv"][$i];
   if (strpos($key, "--") === 0 && array_key_exists($i+1, $_SERVER["argv"])) {
@@ -22,6 +23,9 @@ for ( $i = 1; $i < count($_SERVER["argv"]); $i++ ) {
   switch ($key) {
     case '--hostname':
       $ssh_hostname = $value;
+      break;
+    case '--service':
+      $trepctl_service = $value;
       break;
   }
 }
@@ -35,7 +39,7 @@ if ($ssh_hostname === null) {
 }
 
 if ($cache_dir !== null) {
-  $cache_filename = $cache_dir . DIRECTORY_SEPARATOR . 'cache_cacti_tungsten_' . str_replace(array(":", "/"), array("", "_"), $ssh_hostname);
+  $cache_filename = $cache_dir . DIRECTORY_SEPARATOR . 'cache_cacti_tungsten_' . str_replace(array(":", "/"), array("", "_"), $ssh_hostname) . '_' . $trepctl_service;
 
   /**
    * See if the cache file is available, recent and not empty
@@ -51,7 +55,12 @@ if ($cache_dir !== null) {
 /**
  * Pull the replicator status and parse out the tracking values
  */
-$command = "$tungsten_home/tungsten-replicator/bin/trepctl status | tr -d \" \"";
+if ($trepctl_service != "") {
+  $trepctl_service_option = "-service $trepctl_service";
+} else {
+  $trepctl_service_option = "";
+}
+$command = "$tungsten_home/tungsten-replicator/bin/trepctl $trepctl_service_option status | tr -d \" \"";
 $replicator_status = `ssh $ssh_user@$ssh_hostname $ssh_options $command`;
 
 $results = array();
