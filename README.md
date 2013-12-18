@@ -9,3 +9,4 @@ Possible Options
 * Munin
 * New Relic
 * Logi Analytics
+* Splunk
